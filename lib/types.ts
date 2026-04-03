@@ -63,6 +63,9 @@ export interface Clase {
   cupo_disponible: number;
   estado: "programada" | "en_curso" | "finalizada" | "cancelada";
   notas: string | null;
+  etiqueta: string | null;
+  es_recurrente: boolean;
+  asistentes_real: number | null;
   tipos_clase?: TipoClase;
   coaches?: Coach;
 }
