@@ -1,5 +1,4 @@
-export type Estudio = "Barre" | "Baile" | "Ambos";
-export type Nivel   = "Principiante" | "Intermedio" | "Avanzado";
+export type Estudio = "Barre" | "Pilates" | "Yoga";
 
 export interface Alumna {
   id: string;
