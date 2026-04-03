@@ -18,11 +18,14 @@ export default function AlumnasPage() {
     return matchTab && matchSearch;
   });
 
-  const tabs = [
-    { id: "todas", label: "Todas" }, { id: "barre", label: "Barre" },
-    { id: "baile", label: "Baile" }, { id: "prueba", label: "Prueba" },
-    { id: "bday",  label: "Cumpleaños hoy" },
-  ];
+const tabs = [
+  { id: "todas",   label: "Todas" },
+  { id: "barre",   label: "Barre" },
+  { id: "pilates", label: "Pilates" },
+  { id: "yoga",    label: "Yoga" },
+  { id: "prueba",  label: "Prueba" },
+  { id: "bday",    label: "Cumpleaños hoy" },
+];
 
   const estBadge = (e: string) => {
     const map: Record<string, [string, string]> = { Barre: ["#F0EBE1","#7A6140"], Baile: ["#E8EFF5","#3A5A75"], Ambos: ["#EEE8F2","#5A3A75"] };
