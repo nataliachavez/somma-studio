@@ -1,0 +1,57 @@
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&family=Jost:wght@300;400;500&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* { box-sizing: border-box; }
+
+body {
+  font-family: 'Jost', sans-serif;
+  font-weight: 300;
+  background: #FAF8F5;
+  color: #2C2420;
+  -webkit-font-smoothing: antialiased;
+}
+
+.ss-input {
+  width: 100%;
+  background: transparent;
+  border: none;
+  border-bottom: 0.5px solid #E8E0D8;
+  padding: 8px 0;
+  font-family: 'Jost', sans-serif;
+  font-weight: 300;
+  font-size: 14px;
+  color: #2C2420;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.ss-input:focus { border-bottom-color: #C97B5A; }
+.ss-input::placeholder { color: #C8C0B8; }
+
+.ss-label {
+  display: block;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #9A8880;
+  margin-bottom: 4px;
+  font-weight: 400;
+}
+
+.ss-btn {
+  width: 100%;
+  padding: 14px;
+  background: #2C2420;
+  color: #FAF8F5;
+  font-family: 'Jost', sans-serif;
+  font-weight: 400;
+  font-size: 11px;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  border: none;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.ss-btn:hover { background: #C97B5A; }
+.ss-btn:disabled { background: #9A8880; cursor: not-allowed; }
