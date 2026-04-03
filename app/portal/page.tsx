@@ -76,7 +76,7 @@ export default function PortalPage() {
         <h1 style={{ fontFamily: "'Libre Baskerville', Georgia, serif", fontWeight: 400, fontSize: "72px", letterSpacing: "0.06em", color: "#FFFFFF", lineHeight: 1, margin: "0 0 2px 0" }}>
           somma
         </h1>
-        <p style={{ fontFamily: "'Jost', sans-serif", fontWeight: 400, fontSize: "13px", letterSpacing: "0.55em", textTransform: "uppercase", color: "rgba(255,255,255,0.75)", margin: "0 0 2.5rem 0" }}>
+        <p style={{ fontFamily: "'Jost', sans-serif", fontWeight: 400, fontSize: "36px", letterSpacing: "0.35em", textTransform: "uppercase", color: "rgba(255,255,255,0.75)", margin: "0 0 2.5rem 0" }}>
           studio
         </p>
         <div style={{ width: "40px", height: "0.5px", background: "rgba(255,255,255,0.4)", marginBottom: "2.5rem" }} />
