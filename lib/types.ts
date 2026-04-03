@@ -9,7 +9,7 @@ export interface Alumna {
   telefono: string;
   fecha_nacimiento: string;
   estudio: Estudio;
-  nivel: Nivel;
+  nivel?: string | null;
   como_nos_conocio: string;
   observaciones_medicas: string | null;
   activa: boolean;
