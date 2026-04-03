@@ -14,8 +14,7 @@ export default function AlumnasPage() {
   }, []);
 
   const filtered = alumnas.filter(a => {
-    const matchTab = tab === "todas" ? true : tab === "barre" ? (a.estudio === "Barre" || a.estudio === "Ambos") : tab === "baile" ? (a.estudio === "Baile" || a.estudio === "Ambos") : tab === "prueba" ? a.tipo_alumna === "prueba" : tab === "bday" ? (a.fecha_nacimiento ? esCumpleanosHoy(a.fecha_nacimiento) : false) : true;
-    const matchSearch = search ? `${a.nombre} ${a.apellido} ${a.email}`.toLowerCase().includes(search.toLowerCase()) : true;
+  const matchTab = tab === "todas" ? true : tab === "barre" ? ((a as any).clase_interes === "Barre" || a.estudio === "Barre") : tab === "pilates" ? ((a as any).clase_interes === "Pilates") : tab === "yoga" ? ((a as any).clase_interes === "Yoga") : tab === "prueba" ? a.tipo_alumna === "prueba" : tab === "bday" ? (a.fecha_nacimiento ? esCumpleanosHoy(a.fecha_nacimiento) : false) : true;    const matchSearch = search ? `${a.nombre} ${a.apellido} ${a.email}`.toLowerCase().includes(search.toLowerCase()) : true;
     return matchTab && matchSearch;
   });
 
