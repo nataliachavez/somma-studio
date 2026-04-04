@@ -5,16 +5,26 @@ import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, addMonths,
 import { es } from "date-fns/locale";
 
 type Modal = { open: boolean; fecha?: string };
+type DetalleClase = {
+  clase: Clase;
+  reservas: Array<{
+    id: string;
+    estado: string;
+    alumnas: { nombre: string; apellido: string; email: string; telefono: string; clase_interes: string };
+  }>;
+};
 
 export default function ClasesPage() {
-  const [clases, setClases]   = useState<Clase[]>([]);
-  const [coaches, setCoaches] = useState<Coach[]>([]);
-  const [tipos, setTipos]     = useState<TipoClase[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [mes, setMes]         = useState(new Date());
-  const [modal, setModal]     = useState<Modal>({ open: false });
-  const [vista, setVista]     = useState<"calendario" | "historial">("calendario");
-  const [saving, setSaving]   = useState(false);
+  const [clases, setClases]     = useState<Clase[]>([]);
+  const [coaches, setCoaches]   = useState<Coach[]>([]);
+  const [tipos, setTipos]       = useState<TipoClase[]>([]);
+  const [loading, setLoading]   = useState(true);
+  const [mes, setMes]           = useState(new Date());
+  const [modal, setModal]       = useState<Modal>({ open: false });
+  const [vista, setVista]       = useState<"calendario" | "historial">("calendario");
+  const [saving, setSaving]     = useState(false);
+  const [detalle, setDetalle]   = useState<DetalleClase | null>(null);
+  const [loadingDetalle, setLoadingDetalle] = useState(false);
 
   const [form, setForm] = useState({
     tipo_clase_id: "", coach_id: "", fecha: "", hora_inicio: "", duracion: "60",
@@ -35,6 +45,25 @@ export default function ClasesPage() {
   };
 
   useEffect(() => { cargar(); }, []);
+
+  const verDetalle = async (claseId: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setLoadingDetalle(true);
+    setDetalle(null);
+    const res = await fetch(`/api/admin/clases/${claseId}`);
+    const json = await res.json();
+    setDetalle(json);
+    setLoadingDetalle(false);
+  };
+
+  const actualizarEstado = async (reservaId: string, estado: string, claseId: string) => {
+    await fetch(`/api/admin/clases/${claseId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reserva_id: reservaId, estado }),
+    });
+    verDetalle(claseId);
+  };
 
   const diasMes     = eachDayOfInterval({ start: startOfMonth(mes), end: endOfMonth(mes) });
   const primerDia   = getDay(startOfMonth(mes));
@@ -75,11 +104,7 @@ export default function ClasesPage() {
       body: JSON.stringify(payload),
     });
     const json = await res.json();
-    if (!res.ok) {
-      alert("Error al guardar: " + json.error);
-      setSaving(false);
-      return;
-    }
+    if (!res.ok) { alert("Error al guardar: " + json.error); setSaving(false); return; }
     setModal({ open: false });
     setForm({ tipo_clase_id: "", coach_id: "", fecha: "", hora_inicio: "", duracion: "60", cupo_maximo: "10", etiqueta: "", es_recurrente: false });
     cargar();
@@ -90,102 +115,211 @@ export default function ClasesPage() {
     .filter(c => isBefore(parseISO(c.fecha), new Date()))
     .sort((a, b) => b.fecha.localeCompare(a.fecha));
 
+  const estadoBadge = (estado: string) => {
+    const map: Record<string, [string, string, string]> = {
+      confirmada:   ["#E8EFF5", "#3A5A75", "Confirmada"],
+      asistio:      ["#EAF3DE", "#3B6D11", "Asistió"],
+      no_asistio:   ["#FCEBEB", "#7A2525", "No asistió"],
+      cancelada:    ["#F0EDE8", "#7A7875", "Cancelada"],
+      lista_espera: ["#FFF8E8", "#7A6020", "Lista espera"],
+    };
+    const [bg, color, label] = map[estado] ?? ["#F0EDE8", "#5A5855", estado];
+    return <span style={{ fontSize: "9px", padding: "3px 8px", borderRadius: "20px", background: bg, color, letterSpacing: "0.06em", textTransform: "uppercase" as const }}>{label}</span>;
+  };
+
   const DIAS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 
   return (
-    <div style={{ padding: "1.5rem" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.25rem" }}>
-        <h1 style={{ fontFamily: "'Libre Baskerville', serif", fontWeight: 400, fontSize: "24px", color: "#2C2420" }}>
-          Clases <span style={{ fontStyle: "italic", color: "#C97B5A" }}>programadas</span>
-        </h1>
-        <div style={{ display: "flex", gap: "8px" }}>
-          <button onClick={() => setVista(vista === "calendario" ? "historial" : "calendario")}
-            style={{ fontSize: "10px", letterSpacing: "0.1em", textTransform: "uppercase", padding: "7px 14px", border: "0.5px solid #E8E0D8", borderRadius: "4px", background: "transparent", color: "#8A8880", cursor: "pointer", fontFamily: "'Jost',sans-serif" }}>
-            {vista === "calendario" ? "Ver historial" : "Ver calendario"}
-          </button>
-          <button onClick={() => setModal({ open: true, fecha: format(new Date(), "yyyy-MM-dd") })}
-            style={{ fontSize: "10px", letterSpacing: "0.1em", textTransform: "uppercase", padding: "7px 16px", background: "#2C2420", color: "#FAF8F5", border: "none", borderRadius: "4px", cursor: "pointer", fontFamily: "'Jost',sans-serif" }}>
-            + Nueva clase
-          </button>
+    <div style={{ padding: "1.5rem", display: "flex", gap: "1.5rem" }}>
+
+      {/* Columna principal */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.25rem" }}>
+          <h1 style={{ fontFamily: "'Libre Baskerville', serif", fontWeight: 400, fontSize: "24px", color: "#2C2420" }}>
+            Clases <span style={{ fontStyle: "italic", color: "#C97B5A" }}>programadas</span>
+          </h1>
+          <div style={{ display: "flex", gap: "8px" }}>
+            <button onClick={() => setVista(vista === "calendario" ? "historial" : "calendario")}
+              style={{ fontSize: "10px", letterSpacing: "0.1em", textTransform: "uppercase", padding: "7px 14px", border: "0.5px solid #E8E0D8", borderRadius: "4px", background: "transparent", color: "#8A8880", cursor: "pointer", fontFamily: "'Jost',sans-serif" }}>
+              {vista === "calendario" ? "Ver historial" : "Ver calendario"}
+            </button>
+            <button onClick={() => setModal({ open: true, fecha: format(new Date(), "yyyy-MM-dd") })}
+              style={{ fontSize: "10px", letterSpacing: "0.1em", textTransform: "uppercase", padding: "7px 16px", background: "#2C2420", color: "#FAF8F5", border: "none", borderRadius: "4px", cursor: "pointer", fontFamily: "'Jost',sans-serif" }}>
+              + Nueva clase
+            </button>
+          </div>
         </div>
+
+        {vista === "calendario" ? (
+          <>
+            <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "12px" }}>
+              <button onClick={() => setMes(subMonths(mes, 1))} style={{ border: "0.5px solid #E8E0D8", background: "transparent", padding: "5px 10px", borderRadius: "4px", cursor: "pointer", fontSize: "13px" }}>←</button>
+              <span style={{ fontFamily: "'Libre Baskerville',serif", fontSize: "16px", color: "#2C2420", minWidth: "160px", textAlign: "center" }}>
+                {format(mes, "MMMM yyyy", { locale: es })}
+              </span>
+              <button onClick={() => setMes(addMonths(mes, 1))} style={{ border: "0.5px solid #E8E0D8", background: "transparent", padding: "5px 10px", borderRadius: "4px", cursor: "pointer", fontSize: "13px" }}>→</button>
+              <button onClick={() => setMes(new Date())} style={{ fontSize: "10px", letterSpacing: "0.1em", textTransform: "uppercase", border: "0.5px solid #C97B5A", color: "#C97B5A", background: "transparent", padding: "5px 12px", borderRadius: "4px", cursor: "pointer", fontFamily: "'Jost',sans-serif" }}>Hoy</button>
+            </div>
+
+            <div style={{ background: "#FAF8F5", border: "0.5px solid #E8E0D8", borderRadius: "10px", overflow: "hidden" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", borderBottom: "0.5px solid #E8E0D8" }}>
+                {DIAS.map(d => (
+                  <div key={d} style={{ padding: "8px", textAlign: "center", fontSize: "10px", letterSpacing: "0.12em", textTransform: "uppercase", color: "#9A8880", background: "#F0EDE8" }}>{d}</div>
+                ))}
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)" }}>
+                {Array.from({ length: offsetLunes }).map((_, i) => (
+                  <div key={`empty-${i}`} style={{ minHeight: "100px", borderRight: "0.5px solid #F0EDE8", borderBottom: "0.5px solid #F0EDE8", background: "#FAFAF8" }} />
+                ))}
+                {diasMes.map(dia => {
+                  const esHoy   = format(dia, "yyyy-MM-dd") === format(new Date(), "yyyy-MM-dd");
+                  const clasesD = clasesDia(dia);
+                  const pasado  = isBefore(dia, new Date()) && !esHoy;
+                  return (
+                    <div key={dia.toISOString()}
+                      onClick={() => setModal({ open: true, fecha: format(dia, "yyyy-MM-dd") })}
+                      style={{ minHeight: "100px", borderRight: "0.5px solid #F0EDE8", borderBottom: "0.5px solid #F0EDE8", padding: "6px", cursor: "pointer", background: esHoy ? "#FFF8F5" : "transparent", transition: "background 0.1s" }}
+                      onMouseEnter={e => (e.currentTarget.style.background = "#F8F5F2")}
+                      onMouseLeave={e => (e.currentTarget.style.background = esHoy ? "#FFF8F5" : "transparent")}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                        <span style={{ fontSize: "12px", fontWeight: esHoy ? 500 : 400, color: esHoy ? "#C97B5A" : pasado ? "#C0BDB8" : "#2C2420", background: esHoy ? "#FAF0E8" : "transparent", width: "22px", height: "22px", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          {format(dia, "d")}
+                        </span>
+                        {clasesD.length > 0 && <span style={{ fontSize: "9px", color: "#C97B5A" }}>{clasesD.length}</span>}
+                      </div>
+                      {clasesD.slice(0, 3).map(c => (
+                        <div key={c.id}
+                          onClick={e => { e.stopPropagation(); verDetalle(c.id); }}
+                          style={{ fontSize: "10px", padding: "2px 5px", marginBottom: "2px", borderRadius: "3px", background: c.etiqueta ? "#FFF8E8" : "#F0F5E8", color: c.etiqueta ? "#7A6020" : "#3B6D11", borderLeft: `2px solid ${c.tipos_clase?.color ?? "#C97B5A"}`, lineHeight: 1.3, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis", cursor: "pointer" }}
+                          onMouseEnter={e => (e.currentTarget.style.opacity = "0.7")}
+                          onMouseLeave={e => (e.currentTarget.style.opacity = "1")}>
+                          {c.hora_inicio?.slice(0, 5)} {c.tipos_clase?.nombre?.split(" ")[0]}
+                          {c.etiqueta && <span style={{ marginLeft: "3px", opacity: 0.7 }}>★</span>}
+                        </div>
+                      ))}
+                      {clasesD.length > 3 && <span style={{ fontSize: "9px", color: "#9A8880" }}>+{clasesD.length - 3} más</span>}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: "16px", marginTop: "10px", alignItems: "center" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "4px" }}><span style={{ width: "12px", height: "8px", background: "#F0F5E8", border: "0.5px solid #E8E0D8", borderRadius: "2px", display: "inline-block" }} /><span style={{ fontSize: "10px", color: "#9A8880" }}>Clase regular</span></div>
+              <div style={{ display: "flex", alignItems: "center", gap: "4px" }}><span style={{ width: "12px", height: "8px", background: "#FFF8E8", border: "0.5px solid #E8E0D8", borderRadius: "2px", display: "inline-block" }} /><span style={{ fontSize: "10px", color: "#9A8880" }}>Con etiqueta / promo</span></div>
+              <p style={{ fontSize: "10px", color: "#C0BDB8", marginLeft: "8px" }}>Clic en una clase para ver detalle e inscritos</p>
+            </div>
+          </>
+        ) : (
+          <div style={{ background: "#FAF8F5", border: "0.5px solid #E8E0D8", borderRadius: "10px", overflow: "hidden" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1.2fr 1fr 0.7fr 0.7fr 1fr", gap: "8px", padding: "10px 16px", background: "#F0EDE8", borderBottom: "0.5px solid #E8E0D8", fontSize: "9px", letterSpacing: "0.15em", textTransform: "uppercase", color: "#9A8880" }}>
+              <span>Fecha</span><span>Horario</span><span>Clase</span><span>Coach</span><span>Inscritos</span><span>Asistentes</span><span>Etiqueta</span>
+            </div>
+            {clasesHistorial.length === 0 && <p style={{ padding: "16px", fontSize: "13px", color: "#9A8880" }}>No hay clases pasadas aún.</p>}
+            {clasesHistorial.map(c => (
+              <div key={c.id}
+                onClick={() => verDetalle(c.id)}
+                style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1.2fr 1fr 0.7fr 0.7fr 1fr", gap: "8px", padding: "10px 16px", borderBottom: "0.5px solid #F5F3EF", alignItems: "center", cursor: "pointer", transition: "background 0.1s" }}
+                onMouseEnter={e => (e.currentTarget.style.background = "#F8F5F2")}
+                onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
+                <p style={{ fontSize: "12px", color: "#2C2420" }}>{format(parseISO(c.fecha), "d MMM yyyy", { locale: es })}</p>
+                <p style={{ fontSize: "11px", color: "#9A8880" }}>{c.hora_inicio?.slice(0, 5)} – {c.hora_fin?.slice(0, 5)}</p>
+                <p style={{ fontSize: "12px", color: "#2C2420" }}>{c.tipos_clase?.nombre}</p>
+                <p style={{ fontSize: "11px", color: "#9A8880" }}>{c.coaches?.nombre} {c.coaches?.apellido}</p>
+                <p style={{ fontSize: "12px", color: "#2C2420", textAlign: "center" }}>{c.cupo_maximo - c.cupo_disponible}</p>
+                <p style={{ fontSize: "12px", color: "#2C2420", textAlign: "center" }}>{(c as any).asistentes_real ?? "—"}</p>
+                {c.etiqueta
+                  ? <span style={{ fontSize: "10px", padding: "3px 8px", borderRadius: "20px", background: "#FFF8E8", color: "#7A6020" }}>{c.etiqueta}</span>
+                  : <span style={{ fontSize: "10px", color: "#C0BDB8" }}>—</span>}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
-      {vista === "calendario" ? (
-        <>
-          <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "12px" }}>
-            <button onClick={() => setMes(subMonths(mes, 1))} style={{ border: "0.5px solid #E8E0D8", background: "transparent", padding: "5px 10px", borderRadius: "4px", cursor: "pointer", fontSize: "13px" }}>←</button>
-            <span style={{ fontFamily: "'Libre Baskerville',serif", fontSize: "16px", color: "#2C2420", minWidth: "160px", textAlign: "center" }}>
-              {format(mes, "MMMM yyyy", { locale: es })}
-            </span>
-            <button onClick={() => setMes(addMonths(mes, 1))} style={{ border: "0.5px solid #E8E0D8", background: "transparent", padding: "5px 10px", borderRadius: "4px", cursor: "pointer", fontSize: "13px" }}>→</button>
-            <button onClick={() => setMes(new Date())} style={{ fontSize: "10px", letterSpacing: "0.1em", textTransform: "uppercase", border: "0.5px solid #C97B5A", color: "#C97B5A", background: "transparent", padding: "5px 12px", borderRadius: "4px", cursor: "pointer", fontFamily: "'Jost',sans-serif" }}>Hoy</button>
+      {/* Panel lateral de detalle */}
+      {(detalle || loadingDetalle) && (
+        <div style={{ width: "320px", flexShrink: 0, background: "#FAF8F5", border: "0.5px solid #E8E0D8", borderRadius: "10px", padding: "1.25rem", alignSelf: "flex-start", position: "sticky", top: "1.5rem" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
+            <p style={{ fontSize: "10px", letterSpacing: "0.15em", textTransform: "uppercase", color: "#9A8880" }}>Detalle de clase</p>
+            <button onClick={() => setDetalle(null)} style={{ fontSize: "16px", color: "#C0BDB8", background: "none", border: "none", cursor: "pointer", lineHeight: 1 }}>×</button>
           </div>
 
-          <div style={{ background: "#FAF8F5", border: "0.5px solid #E8E0D8", borderRadius: "10px", overflow: "hidden" }}>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", borderBottom: "0.5px solid #E8E0D8" }}>
-              {DIAS.map(d => (
-                <div key={d} style={{ padding: "8px", textAlign: "center", fontSize: "10px", letterSpacing: "0.12em", textTransform: "uppercase", color: "#9A8880", background: "#F0EDE8" }}>{d}</div>
-              ))}
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)" }}>
-              {Array.from({ length: offsetLunes }).map((_, i) => (
-                <div key={`empty-${i}`} style={{ minHeight: "110px", borderRight: "0.5px solid #F0EDE8", borderBottom: "0.5px solid #F0EDE8", background: "#FAFAF8" }} />
-              ))}
-              {diasMes.map(dia => {
-                const esHoy   = format(dia, "yyyy-MM-dd") === format(new Date(), "yyyy-MM-dd");
-                const clasesD = clasesDia(dia);
-                const pasado  = isBefore(dia, new Date()) && !esHoy;
-                return (
-                  <div key={dia.toISOString()} onClick={() => setModal({ open: true, fecha: format(dia, "yyyy-MM-dd") })}
-                    style={{ minHeight: "110px", borderRight: "0.5px solid #F0EDE8", borderBottom: "0.5px solid #F0EDE8", padding: "6px", cursor: "pointer", background: esHoy ? "#FFF8F5" : "transparent", transition: "background 0.1s" }}
-                    onMouseEnter={e => (e.currentTarget.style.background = "#F8F5F2")}
-                    onMouseLeave={e => (e.currentTarget.style.background = esHoy ? "#FFF8F5" : "transparent")}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
-                      <span style={{ fontSize: "12px", fontWeight: esHoy ? 500 : 400, color: esHoy ? "#C97B5A" : pasado ? "#C0BDB8" : "#2C2420", background: esHoy ? "#FAF0E8" : "transparent", width: "22px", height: "22px", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                        {format(dia, "d")}
-                      </span>
-                      {clasesD.length > 0 && <span style={{ fontSize: "9px", color: "#C97B5A" }}>{clasesD.length}</span>}
-                    </div>
-                    {clasesD.slice(0, 3).map(c => (
-                      <div key={c.id} style={{ fontSize: "10px", padding: "2px 5px", marginBottom: "2px", borderRadius: "3px", background: c.etiqueta ? "#FFF8E8" : "#F0F5E8", color: c.etiqueta ? "#7A6020" : "#3B6D11", borderLeft: `2px solid ${c.tipos_clase?.color ?? "#C97B5A"}`, lineHeight: 1.3, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>
-                        {c.hora_inicio?.slice(0, 5)} {c.tipos_clase?.nombre?.split(" ")[0]}
-                        {c.etiqueta && <span style={{ marginLeft: "3px", opacity: 0.7 }}>★</span>}
-                      </div>
-                    ))}
-                    {clasesD.length > 3 && <span style={{ fontSize: "9px", color: "#9A8880" }}>+{clasesD.length - 3} más</span>}
+          {loadingDetalle && <p style={{ fontSize: "13px", color: "#9A8880" }}>Cargando...</p>}
+
+          {detalle && (
+            <>
+              {/* Info clase */}
+              <div style={{ marginBottom: "1rem", paddingBottom: "1rem", borderBottom: "0.5px solid #E8E0D8" }}>
+                <div style={{ display: "flex", gap: "8px", alignItems: "flex-start", marginBottom: "8px" }}>
+                  <div style={{ width: "4px", height: "40px", borderRadius: "2px", background: detalle.clase.tipos_clase?.color ?? "#C97B5A", flexShrink: 0, marginTop: "2px" }} />
+                  <div>
+                    <p style={{ fontSize: "15px", fontWeight: 400, color: "#2C2420", marginBottom: "2px" }}>{detalle.clase.tipos_clase?.nombre}</p>
+                    <p style={{ fontSize: "11px", color: "#9A8880" }}>
+                      {format(parseISO(detalle.clase.fecha), "EEEE d 'de' MMMM yyyy", { locale: es })}
+                    </p>
+                    <p style={{ fontSize: "11px", color: "#9A8880" }}>
+                      {detalle.clase.hora_inicio?.slice(0,5)} – {detalle.clase.hora_fin?.slice(0,5)}
+                    </p>
                   </div>
-                );
-              })}
-            </div>
-          </div>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginTop: "8px" }}>
+                  <div style={{ background: "#F5F3EF", borderRadius: "6px", padding: "8px 10px" }}>
+                    <p style={{ fontSize: "9px", letterSpacing: "0.12em", textTransform: "uppercase", color: "#9A8880", marginBottom: "2px" }}>Coach</p>
+                    <p style={{ fontSize: "12px", color: "#2C2420" }}>{detalle.clase.coaches?.nombre} {detalle.clase.coaches?.apellido}</p>
+                  </div>
+                  <div style={{ background: "#F5F3EF", borderRadius: "6px", padding: "8px 10px" }}>
+                    <p style={{ fontSize: "9px", letterSpacing: "0.12em", textTransform: "uppercase", color: "#9A8880", marginBottom: "2px" }}>Cupos</p>
+                    <p style={{ fontSize: "12px", color: detalle.clase.cupo_disponible === 0 ? "#C97B5A" : "#2C2420" }}>
+                      {detalle.clase.cupo_disponible} libres / {detalle.clase.cupo_maximo}
+                    </p>
+                  </div>
+                </div>
+                {detalle.clase.etiqueta && (
+                  <div style={{ marginTop: "8px" }}>
+                    <span style={{ fontSize: "10px", padding: "3px 10px", borderRadius: "20px", background: "#FFF8E8", color: "#7A6020" }}>★ {detalle.clase.etiqueta}</span>
+                  </div>
+                )}
+              </div>
 
-          <div style={{ display: "flex", gap: "16px", marginTop: "10px", alignItems: "center" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "4px" }}><span style={{ width: "12px", height: "8px", background: "#F0F5E8", border: "0.5px solid #E8E0D8", borderRadius: "2px", display: "inline-block" }} /><span style={{ fontSize: "10px", color: "#9A8880" }}>Clase regular</span></div>
-            <div style={{ display: "flex", alignItems: "center", gap: "4px" }}><span style={{ width: "12px", height: "8px", background: "#FFF8E8", border: "0.5px solid #E8E0D8", borderRadius: "2px", display: "inline-block" }} /><span style={{ fontSize: "10px", color: "#9A8880" }}>Clase con etiqueta / promo</span></div>
-          </div>
-        </>
-      ) : (
-        <div style={{ background: "#FAF8F5", border: "0.5px solid #E8E0D8", borderRadius: "10px", overflow: "hidden" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr 0.8fr 0.8fr 1fr", gap: "8px", padding: "10px 16px", background: "#F0EDE8", borderBottom: "0.5px solid #E8E0D8", fontSize: "9px", letterSpacing: "0.15em", textTransform: "uppercase", color: "#9A8880" }}>
-            <span>Fecha</span><span>Horario</span><span>Clase</span><span>Coach</span><span>Inscriptos</span><span>Asistentes</span><span>Etiqueta</span>
-          </div>
-          {clasesHistorial.length === 0 && <p style={{ padding: "16px", fontSize: "13px", color: "#9A8880" }}>No hay clases pasadas aún.</p>}
-          {clasesHistorial.map(c => (
-            <div key={c.id} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr 0.8fr 0.8fr 1fr", gap: "8px", padding: "10px 16px", borderBottom: "0.5px solid #F5F3EF", alignItems: "center" }}>
-              <p style={{ fontSize: "12px", color: "#2C2420" }}>{format(parseISO(c.fecha), "d MMM yyyy", { locale: es })}</p>
-              <p style={{ fontSize: "11px", color: "#9A8880" }}>{c.hora_inicio?.slice(0, 5)} – {c.hora_fin?.slice(0, 5)}</p>
-              <p style={{ fontSize: "12px", color: "#2C2420" }}>{c.tipos_clase?.nombre}</p>
-              <p style={{ fontSize: "11px", color: "#9A8880" }}>{c.coaches?.nombre} {c.coaches?.apellido}</p>
-              <p style={{ fontSize: "12px", color: "#2C2420", textAlign: "center" }}>{c.cupo_maximo - c.cupo_disponible}</p>
-              <p style={{ fontSize: "12px", color: "#2C2420", textAlign: "center" }}>{(c as any).asistentes_real ?? "—"}</p>
-              {c.etiqueta
-                ? <span style={{ fontSize: "10px", padding: "3px 8px", borderRadius: "20px", background: "#FFF8E8", color: "#7A6020" }}>{c.etiqueta}</span>
-                : <span style={{ fontSize: "10px", color: "#C0BDB8" }}>—</span>}
-            </div>
-          ))}
+              {/* Lista inscritos */}
+              <div>
+                <p style={{ fontSize: "10px", letterSpacing: "0.15em", textTransform: "uppercase", color: "#9A8880", marginBottom: "10px" }}>
+                  Inscritos ({detalle.reservas.length})
+                </p>
+                {detalle.reservas.length === 0 ? (
+                  <p style={{ fontSize: "12px", color: "#C0BDB8" }}>Sin inscritos aún</p>
+                ) : (
+                  detalle.reservas.map(r => (
+                    <div key={r.id} style={{ marginBottom: "10px", paddingBottom: "10px", borderBottom: "0.5px solid #F0EDE8" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "6px" }}>
+                        <div>
+                          <p style={{ fontSize: "12px", fontWeight: 400, color: "#2C2420" }}>
+                            {r.alumnas?.nombre} {r.alumnas?.apellido}
+                          </p>
+                          <p style={{ fontSize: "10px", color: "#9A8880" }}>{r.alumnas?.telefono}</p>
+                        </div>
+                        {estadoBadge(r.estado)}
+                      </div>
+                      {/* Cambiar estado */}
+                      <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" as const }}>
+                        {["confirmada","asistio","no_asistio","cancelada"].map(est => (
+                          <button key={est} onClick={() => actualizarEstado(r.id, est, detalle.clase.id)}
+                            style={{ fontSize: "9px", padding: "3px 8px", borderRadius: "20px", border: `0.5px solid ${r.estado === est ? "#C97B5A" : "#E8E0D8"}`, background: r.estado === est ? "#FAF0E8" : "transparent", color: r.estado === est ? "#C97B5A" : "#9A8880", cursor: "pointer", fontFamily: "'Jost',sans-serif", textTransform: "uppercase" as const, letterSpacing: "0.05em" }}>
+                            {est === "confirmada" ? "Confirmada" : est === "asistio" ? "Asistió" : est === "no_asistio" ? "No asistió" : "Cancelar"}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </>
+          )}
         </div>
       )}
 
+      {/* Modal nueva clase */}
       {modal.open && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(44,36,32,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50 }}>
           <div style={{ background: "#FAF8F5", borderRadius: "12px", padding: "2rem", width: "480px", maxHeight: "90vh", overflowY: "auto" }}>
