@@ -20,6 +20,28 @@ export async function GET(
   return NextResponse.json({ clase: claseRes.data, reservas: reservasRes.data ?? [] });
 }
 
+export async function PUT(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const db   = supabaseAdmin();
+  const body = await req.json();
+  const { error } = await db.from("clases")
+    .update({
+      tipo_clase_id:   body.tipo_clase_id,
+      coach_id:        body.coach_id,
+      fecha:           body.fecha,
+      hora_inicio:     body.hora_inicio,
+      hora_fin:        body.hora_fin,
+      cupo_maximo:     parseInt(body.cupo_maximo),
+      etiqueta:        body.etiqueta || null,
+      estado:          body.estado,
+    })
+    .eq("id", params.id);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ success: true });
+}
+
 export async function PATCH(
   req: NextRequest,
   { params }: { params: { id: string } }
