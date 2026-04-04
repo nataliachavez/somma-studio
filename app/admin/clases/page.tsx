@@ -7,20 +7,19 @@ import { es } from "date-fns/locale";
 type Modal = { open: boolean; fecha?: string };
 
 export default function ClasesPage() {
-  const [clases, setClases]       = useState<Clase[]>([]);
-  const [coaches, setCoaches]     = useState<Coach[]>([]);
-  const [tipos, setTipos]         = useState<TipoClase[]>([]);
-  const [loading, setLoading]     = useState(true);
-  const [mes, setMes]             = useState(new Date());
-  const [modal, setModal]         = useState<Modal>({ open: false });
-  const [vista, setVista]         = useState<"calendario" | "historial">("calendario");
+  const [clases, setClases]   = useState<Clase[]>([]);
+  const [coaches, setCoaches] = useState<Coach[]>([]);
+  const [tipos, setTipos]     = useState<TipoClase[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [mes, setMes]         = useState(new Date());
+  const [modal, setModal]     = useState<Modal>({ open: false });
+  const [vista, setVista]     = useState<"calendario" | "historial">("calendario");
+  const [saving, setSaving]   = useState(false);
 
-  // Form state
   const [form, setForm] = useState({
     tipo_clase_id: "", coach_id: "", fecha: "", hora_inicio: "", duracion: "60",
     cupo_maximo: "10", etiqueta: "", es_recurrente: false,
   });
-  const [saving, setSaving] = useState(false);
 
   const cargar = () => {
     Promise.all([
@@ -37,9 +36,8 @@ export default function ClasesPage() {
 
   useEffect(() => { cargar(); }, []);
 
-  // Días del mes actual
   const diasMes     = eachDayOfInterval({ start: startOfMonth(mes), end: endOfMonth(mes) });
-  const primerDia   = getDay(startOfMonth(mes)); // 0=Dom
+  const primerDia   = getDay(startOfMonth(mes));
   const offsetLunes = primerDia === 0 ? 6 : primerDia - 1;
 
   const clasesDia = (fecha: Date) =>
@@ -53,11 +51,10 @@ export default function ClasesPage() {
     return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
   };
 
-const guardarClase = async () => {
+  const guardarClase = async () => {
     const fechaFinal = form.fecha || modal.fecha || "";
     if (!form.tipo_clase_id || !form.coach_id || !fechaFinal || !form.hora_inicio) {
       alert("Por favor completa: tipo de clase, coach, fecha y hora de inicio.");
-      setSaving(false);
       return;
     }
     setSaving(true);
@@ -72,26 +69,17 @@ const guardarClase = async () => {
       etiqueta:      form.etiqueta,
       es_recurrente: form.es_recurrente,
     };
-    const res = await fetch("/api/admin/clases", {
+    const res  = await fetch("/api/admin/clases", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
     const json = await res.json();
     if (!res.ok) {
-      alert("Error: " + json.error);
+      alert("Error al guardar: " + json.error);
       setSaving(false);
       return;
     }
-    setModal({ open: false });
-    setForm({ tipo_clase_id: "", coach_id: "", fecha: "", hora_inicio: "", duracion: "60", cupo_maximo: "10", etiqueta: "", es_recurrente: false });
-    cargar();
-    setSaving(false);
-  };
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...form, hora_fin, cupo_disponible: parseInt(form.cupo_maximo) }),
-    });
     setModal({ open: false });
     setForm({ tipo_clase_id: "", coach_id: "", fecha: "", hora_inicio: "", duracion: "60", cupo_maximo: "10", etiqueta: "", es_recurrente: false });
     cargar();
@@ -106,7 +94,6 @@ const guardarClase = async () => {
 
   return (
     <div style={{ padding: "1.5rem" }}>
-      {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.25rem" }}>
         <h1 style={{ fontFamily: "'Libre Baskerville', serif", fontWeight: 400, fontSize: "24px", color: "#2C2420" }}>
           Clases <span style={{ fontStyle: "italic", color: "#C97B5A" }}>programadas</span>
@@ -125,7 +112,6 @@ const guardarClase = async () => {
 
       {vista === "calendario" ? (
         <>
-          {/* Navegación de mes */}
           <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "12px" }}>
             <button onClick={() => setMes(subMonths(mes, 1))} style={{ border: "0.5px solid #E8E0D8", background: "transparent", padding: "5px 10px", borderRadius: "4px", cursor: "pointer", fontSize: "13px" }}>←</button>
             <span style={{ fontFamily: "'Libre Baskerville',serif", fontSize: "16px", color: "#2C2420", minWidth: "160px", textAlign: "center" }}>
@@ -135,23 +121,20 @@ const guardarClase = async () => {
             <button onClick={() => setMes(new Date())} style={{ fontSize: "10px", letterSpacing: "0.1em", textTransform: "uppercase", border: "0.5px solid #C97B5A", color: "#C97B5A", background: "transparent", padding: "5px 12px", borderRadius: "4px", cursor: "pointer", fontFamily: "'Jost',sans-serif" }}>Hoy</button>
           </div>
 
-          {/* Calendario */}
           <div style={{ background: "#FAF8F5", border: "0.5px solid #E8E0D8", borderRadius: "10px", overflow: "hidden" }}>
-            {/* Cabecera días */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", borderBottom: "0.5px solid #E8E0D8" }}>
               {DIAS.map(d => (
                 <div key={d} style={{ padding: "8px", textAlign: "center", fontSize: "10px", letterSpacing: "0.12em", textTransform: "uppercase", color: "#9A8880", background: "#F0EDE8" }}>{d}</div>
               ))}
             </div>
-            {/* Grid días */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)" }}>
               {Array.from({ length: offsetLunes }).map((_, i) => (
                 <div key={`empty-${i}`} style={{ minHeight: "110px", borderRight: "0.5px solid #F0EDE8", borderBottom: "0.5px solid #F0EDE8", background: "#FAFAF8" }} />
               ))}
               {diasMes.map(dia => {
-                const esHoy    = format(dia, "yyyy-MM-dd") === format(new Date(), "yyyy-MM-dd");
-                const clasesD  = clasesDia(dia);
-                const pasado   = isBefore(dia, new Date()) && !esHoy;
+                const esHoy   = format(dia, "yyyy-MM-dd") === format(new Date(), "yyyy-MM-dd");
+                const clasesD = clasesDia(dia);
+                const pasado  = isBefore(dia, new Date()) && !esHoy;
                 return (
                   <div key={dia.toISOString()} onClick={() => setModal({ open: true, fecha: format(dia, "yyyy-MM-dd") })}
                     style={{ minHeight: "110px", borderRight: "0.5px solid #F0EDE8", borderBottom: "0.5px solid #F0EDE8", padding: "6px", cursor: "pointer", background: esHoy ? "#FFF8F5" : "transparent", transition: "background 0.1s" }}
@@ -176,14 +159,12 @@ const guardarClase = async () => {
             </div>
           </div>
 
-          {/* Leyenda */}
           <div style={{ display: "flex", gap: "16px", marginTop: "10px", alignItems: "center" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "4px" }}><span style={{ width: "12px", height: "8px", background: "#F0F5E8", border: "0.5px solid #E8E0D8", borderRadius: "2px", display: "inline-block" }} /><span style={{ fontSize: "10px", color: "#9A8880" }}>Clase regular</span></div>
             <div style={{ display: "flex", alignItems: "center", gap: "4px" }}><span style={{ width: "12px", height: "8px", background: "#FFF8E8", border: "0.5px solid #E8E0D8", borderRadius: "2px", display: "inline-block" }} /><span style={{ fontSize: "10px", color: "#9A8880" }}>Clase con etiqueta / promo</span></div>
           </div>
         </>
       ) : (
-        /* Historial */
         <div style={{ background: "#FAF8F5", border: "0.5px solid #E8E0D8", borderRadius: "10px", overflow: "hidden" }}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr 0.8fr 0.8fr 1fr", gap: "8px", padding: "10px 16px", background: "#F0EDE8", borderBottom: "0.5px solid #E8E0D8", fontSize: "9px", letterSpacing: "0.15em", textTransform: "uppercase", color: "#9A8880" }}>
             <span>Fecha</span><span>Horario</span><span>Clase</span><span>Coach</span><span>Inscriptos</span><span>Asistentes</span><span>Etiqueta</span>
@@ -205,7 +186,6 @@ const guardarClase = async () => {
         </div>
       )}
 
-      {/* Modal nueva clase */}
       {modal.open && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(44,36,32,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50 }}>
           <div style={{ background: "#FAF8F5", borderRadius: "12px", padding: "2rem", width: "480px", maxHeight: "90vh", overflowY: "auto" }}>
@@ -241,13 +221,13 @@ const guardarClase = async () => {
                 <input className="ss-input" type="time" value={form.hora_inicio} onChange={e => setForm({ ...form, hora_inicio: e.target.value })} />
               </div>
               <div>
-                <label className="ss-label">Duración (minutos)</label>
-               <select className="ss-input" style={{ cursor: "pointer" }} value={form.duracion} onChange={e => setForm({ ...form, duracion: e.target.value })}>
-                <option value="30">30 min</option>
-                <option value="45">45 min</option>
-                <option value="50">50 min</option>
-                <option value="60">60 min</option>
-              </select>
+                <label className="ss-label">Duración</label>
+                <select className="ss-input" style={{ cursor: "pointer" }} value={form.duracion} onChange={e => setForm({ ...form, duracion: e.target.value })}>
+                  <option value="30">30 min</option>
+                  <option value="45">45 min</option>
+                  <option value="50">50 min</option>
+                  <option value="60">60 min</option>
+                </select>
               </div>
             </div>
 
@@ -266,7 +246,7 @@ const guardarClase = async () => {
               <button onClick={() => setModal({ open: false })} style={{ flex: 1, padding: "12px", border: "0.5px solid #E8E0D8", background: "transparent", color: "#9A8880", fontSize: "11px", letterSpacing: "0.1em", textTransform: "uppercase", cursor: "pointer", borderRadius: "4px", fontFamily: "'Jost',sans-serif" }}>
                 Cancelar
               </button>
-              <button onClick={guardarClase} disabled={saving || !form.tipo_clase_id || !form.coach_id || !form.hora_inicio}
+              <button onClick={guardarClase} disabled={saving}
                 style={{ flex: 2, padding: "12px", background: saving ? "#9A8880" : "#2C2420", color: "#FAF8F5", border: "none", fontSize: "11px", letterSpacing: "0.15em", textTransform: "uppercase", cursor: "pointer", borderRadius: "4px", fontFamily: "'Jost',sans-serif", transition: "background 0.2s" }}>
                 {saving ? "Guardando..." : "Guardar clase"}
               </button>
