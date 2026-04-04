@@ -25,6 +25,9 @@ export default function ClasesPage() {
   const [saving, setSaving]     = useState(false);
   const [detalle, setDetalle]   = useState<DetalleClase | null>(null);
   const [loadingDetalle, setLoadingDetalle] = useState(false);
+  const [editando, setEditando] = useState(false);
+  const [editForm, setEditForm] = useState<any>({});
+  const [savingEdit, setSavingEdit] = useState(false);
 
   const [form, setForm] = useState({
     tipo_clase_id: "", coach_id: "", fecha: "", hora_inicio: "", duracion: "60",
@@ -50,10 +53,38 @@ export default function ClasesPage() {
     e?.stopPropagation();
     setLoadingDetalle(true);
     setDetalle(null);
+    setEditando(false);
     const res = await fetch(`/api/admin/clases/${claseId}`);
     const json = await res.json();
     setDetalle(json);
+    setEditForm({
+      tipo_clase_id: json.clase.tipo_clase_id,
+      coach_id:      json.clase.coach_id,
+      fecha:         json.clase.fecha,
+      hora_inicio:   json.clase.hora_inicio?.slice(0,5),
+      hora_fin:      json.clase.hora_fin?.slice(0,5),
+      cupo_maximo:   String(json.clase.cupo_maximo),
+      etiqueta:      json.clase.etiqueta ?? "",
+      estado:        json.clase.estado,
+    });
     setLoadingDetalle(false);
+  };
+
+  const guardarEdicion = async () => {
+    if (!detalle) return;
+    setSavingEdit(true);
+    const calcHoraFin = (inicio: string, fin: string) => fin || inicio;
+    const res = await fetch(`/api/admin/clases/${detalle.clase.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...editForm, hora_fin: editForm.hora_fin }),
+    });
+    const json = await res.json();
+    if (!res.ok) { alert("Error: " + json.error); setSavingEdit(false); return; }
+    setEditando(false);
+    cargar();
+    verDetalle(detalle.clase.id);
+    setSavingEdit(false);
   };
 
   const actualizarEstado = async (reservaId: string, estado: string, claseId: string) => {
@@ -88,20 +119,10 @@ export default function ClasesPage() {
     }
     setSaving(true);
     const hora_fin = calcularHoraFin(form.hora_inicio, form.duracion);
-    const payload = {
-      tipo_clase_id: form.tipo_clase_id,
-      coach_id:      form.coach_id,
-      fecha:         fechaFinal,
-      hora_inicio:   form.hora_inicio,
-      hora_fin:      hora_fin,
-      cupo_maximo:   form.cupo_maximo,
-      etiqueta:      form.etiqueta,
-      es_recurrente: form.es_recurrente,
-    };
-    const res  = await fetch("/api/admin/clases", {
+    const res = await fetch("/api/admin/clases", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ ...form, fecha: fechaFinal, hora_fin }),
     });
     const json = await res.json();
     if (!res.ok) { alert("Error al guardar: " + json.error); setSaving(false); return; }
@@ -115,6 +136,10 @@ export default function ClasesPage() {
     .filter(c => isBefore(parseISO(c.fecha), new Date()))
     .sort((a, b) => b.fecha.localeCompare(a.fecha));
 
+  const clasesFuturas = clases
+    .filter(c => !isBefore(parseISO(c.fecha), new Date()))
+    .sort((a, b) => a.fecha.localeCompare(b.fecha));
+
   const estadoBadge = (estado: string) => {
     const map: Record<string, [string, string, string]> = {
       confirmada:   ["#E8EFF5", "#3A5A75", "Confirmada"],
@@ -126,6 +151,8 @@ export default function ClasesPage() {
     const [bg, color, label] = map[estado] ?? ["#F0EDE8", "#5A5855", estado];
     return <span style={{ fontSize: "9px", padding: "3px 8px", borderRadius: "20px", background: bg, color, letterSpacing: "0.06em", textTransform: "uppercase" as const }}>{label}</span>;
   };
+
+  const esFutura = detalle ? !isBefore(parseISO(detalle.clase.fecha), new Date()) : false;
 
   const DIAS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 
@@ -203,11 +230,10 @@ export default function ClasesPage() {
                 })}
               </div>
             </div>
-
             <div style={{ display: "flex", gap: "16px", marginTop: "10px", alignItems: "center" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "4px" }}><span style={{ width: "12px", height: "8px", background: "#F0F5E8", border: "0.5px solid #E8E0D8", borderRadius: "2px", display: "inline-block" }} /><span style={{ fontSize: "10px", color: "#9A8880" }}>Clase regular</span></div>
-              <div style={{ display: "flex", alignItems: "center", gap: "4px" }}><span style={{ width: "12px", height: "8px", background: "#FFF8E8", border: "0.5px solid #E8E0D8", borderRadius: "2px", display: "inline-block" }} /><span style={{ fontSize: "10px", color: "#9A8880" }}>Con etiqueta / promo</span></div>
-              <p style={{ fontSize: "10px", color: "#C0BDB8", marginLeft: "8px" }}>Clic en una clase para ver detalle e inscritos</p>
+              <div style={{ display: "flex", alignItems: "center", gap: "4px" }}><span style={{ width: "12px", height: "8px", background: "#FFF8E8", border: "0.5px solid #E8E0D8", borderRadius: "2px", display: "inline-block" }} /><span style={{ fontSize: "10px", color: "#9A8880" }}>Con etiqueta</span></div>
+              <p style={{ fontSize: "10px", color: "#C0BDB8", marginLeft: "8px" }}>Clic en una clase para ver detalle · clic en día vacío para agregar clase</p>
             </div>
           </>
         ) : (
@@ -217,8 +243,7 @@ export default function ClasesPage() {
             </div>
             {clasesHistorial.length === 0 && <p style={{ padding: "16px", fontSize: "13px", color: "#9A8880" }}>No hay clases pasadas aún.</p>}
             {clasesHistorial.map(c => (
-              <div key={c.id}
-                onClick={() => verDetalle(c.id)}
+              <div key={c.id} onClick={() => verDetalle(c.id)}
                 style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1.2fr 1fr 0.7fr 0.7fr 1fr", gap: "8px", padding: "10px 16px", borderBottom: "0.5px solid #F5F3EF", alignItems: "center", cursor: "pointer", transition: "background 0.1s" }}
                 onMouseEnter={e => (e.currentTarget.style.background = "#F8F5F2")}
                 onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
@@ -228,42 +253,35 @@ export default function ClasesPage() {
                 <p style={{ fontSize: "11px", color: "#9A8880" }}>{c.coaches?.nombre} {c.coaches?.apellido}</p>
                 <p style={{ fontSize: "12px", color: "#2C2420", textAlign: "center" }}>{c.cupo_maximo - c.cupo_disponible}</p>
                 <p style={{ fontSize: "12px", color: "#2C2420", textAlign: "center" }}>{(c as any).asistentes_real ?? "—"}</p>
-                {c.etiqueta
-                  ? <span style={{ fontSize: "10px", padding: "3px 8px", borderRadius: "20px", background: "#FFF8E8", color: "#7A6020" }}>{c.etiqueta}</span>
-                  : <span style={{ fontSize: "10px", color: "#C0BDB8" }}>—</span>}
+                {c.etiqueta ? <span style={{ fontSize: "10px", padding: "3px 8px", borderRadius: "20px", background: "#FFF8E8", color: "#7A6020" }}>{c.etiqueta}</span> : <span style={{ fontSize: "10px", color: "#C0BDB8" }}>—</span>}
               </div>
             ))}
           </div>
         )}
       </div>
 
-      {/* Panel lateral de detalle */}
+      {/* Panel lateral detalle */}
       {(detalle || loadingDetalle) && (
         <div style={{ width: "320px", flexShrink: 0, background: "#FAF8F5", border: "0.5px solid #E8E0D8", borderRadius: "10px", padding: "1.25rem", alignSelf: "flex-start", position: "sticky", top: "1.5rem" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
             <p style={{ fontSize: "10px", letterSpacing: "0.15em", textTransform: "uppercase", color: "#9A8880" }}>Detalle de clase</p>
-            <button onClick={() => setDetalle(null)} style={{ fontSize: "16px", color: "#C0BDB8", background: "none", border: "none", cursor: "pointer", lineHeight: 1 }}>×</button>
+            <button onClick={() => { setDetalle(null); setEditando(false); }} style={{ fontSize: "18px", color: "#C0BDB8", background: "none", border: "none", cursor: "pointer", lineHeight: 1 }}>×</button>
           </div>
 
           {loadingDetalle && <p style={{ fontSize: "13px", color: "#9A8880" }}>Cargando...</p>}
 
-          {detalle && (
+          {detalle && !editando && (
             <>
-              {/* Info clase */}
               <div style={{ marginBottom: "1rem", paddingBottom: "1rem", borderBottom: "0.5px solid #E8E0D8" }}>
-                <div style={{ display: "flex", gap: "8px", alignItems: "flex-start", marginBottom: "8px" }}>
-                  <div style={{ width: "4px", height: "40px", borderRadius: "2px", background: detalle.clase.tipos_clase?.color ?? "#C97B5A", flexShrink: 0, marginTop: "2px" }} />
+                <div style={{ display: "flex", gap: "8px", alignItems: "flex-start", marginBottom: "10px" }}>
+                  <div style={{ width: "4px", height: "44px", borderRadius: "2px", background: detalle.clase.tipos_clase?.color ?? "#C97B5A", flexShrink: 0, marginTop: "2px" }} />
                   <div>
                     <p style={{ fontSize: "15px", fontWeight: 400, color: "#2C2420", marginBottom: "2px" }}>{detalle.clase.tipos_clase?.nombre}</p>
-                    <p style={{ fontSize: "11px", color: "#9A8880" }}>
-                      {format(parseISO(detalle.clase.fecha), "EEEE d 'de' MMMM yyyy", { locale: es })}
-                    </p>
-                    <p style={{ fontSize: "11px", color: "#9A8880" }}>
-                      {detalle.clase.hora_inicio?.slice(0,5)} – {detalle.clase.hora_fin?.slice(0,5)}
-                    </p>
+                    <p style={{ fontSize: "11px", color: "#9A8880" }}>{format(parseISO(detalle.clase.fecha), "EEEE d 'de' MMMM yyyy", { locale: es })}</p>
+                    <p style={{ fontSize: "11px", color: "#9A8880" }}>{detalle.clase.hora_inicio?.slice(0,5)} – {detalle.clase.hora_fin?.slice(0,5)}</p>
                   </div>
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginTop: "8px" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "10px" }}>
                   <div style={{ background: "#F5F3EF", borderRadius: "6px", padding: "8px 10px" }}>
                     <p style={{ fontSize: "9px", letterSpacing: "0.12em", textTransform: "uppercase", color: "#9A8880", marginBottom: "2px" }}>Coach</p>
                     <p style={{ fontSize: "12px", color: "#2C2420" }}>{detalle.clase.coaches?.nombre} {detalle.clase.coaches?.apellido}</p>
@@ -276,13 +294,18 @@ export default function ClasesPage() {
                   </div>
                 </div>
                 {detalle.clase.etiqueta && (
-                  <div style={{ marginTop: "8px" }}>
+                  <div style={{ marginBottom: "10px" }}>
                     <span style={{ fontSize: "10px", padding: "3px 10px", borderRadius: "20px", background: "#FFF8E8", color: "#7A6020" }}>★ {detalle.clase.etiqueta}</span>
                   </div>
                 )}
+                {esFutura && (
+                  <button onClick={() => setEditando(true)}
+                    style={{ width: "100%", padding: "8px", fontSize: "10px", letterSpacing: "0.12em", textTransform: "uppercase", border: "0.5px solid #C97B5A", background: "transparent", color: "#C97B5A", borderRadius: "4px", cursor: "pointer", fontFamily: "'Jost',sans-serif" }}>
+                    Editar clase
+                  </button>
+                )}
               </div>
 
-              {/* Lista inscritos */}
               <div>
                 <p style={{ fontSize: "10px", letterSpacing: "0.15em", textTransform: "uppercase", color: "#9A8880", marginBottom: "10px" }}>
                   Inscritos ({detalle.reservas.length})
@@ -294,14 +317,11 @@ export default function ClasesPage() {
                     <div key={r.id} style={{ marginBottom: "10px", paddingBottom: "10px", borderBottom: "0.5px solid #F0EDE8" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "6px" }}>
                         <div>
-                          <p style={{ fontSize: "12px", fontWeight: 400, color: "#2C2420" }}>
-                            {r.alumnas?.nombre} {r.alumnas?.apellido}
-                          </p>
+                          <p style={{ fontSize: "12px", fontWeight: 400, color: "#2C2420" }}>{r.alumnas?.nombre} {r.alumnas?.apellido}</p>
                           <p style={{ fontSize: "10px", color: "#9A8880" }}>{r.alumnas?.telefono}</p>
                         </div>
                         {estadoBadge(r.estado)}
                       </div>
-                      {/* Cambiar estado */}
                       <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" as const }}>
                         {["confirmada","asistio","no_asistio","cancelada"].map(est => (
                           <button key={est} onClick={() => actualizarEstado(r.id, est, detalle.clase.id)}
@@ -313,6 +333,73 @@ export default function ClasesPage() {
                     </div>
                   ))
                 )}
+              </div>
+            </>
+          )}
+
+          {/* Formulario de edición */}
+          {detalle && editando && (
+            <>
+              <p style={{ fontSize: "12px", color: "#9A8880", marginBottom: "1rem" }}>
+                Editando: <span style={{ color: "#2C2420", fontWeight: 400 }}>{detalle.clase.tipos_clase?.nombre}</span>
+              </p>
+
+              <div style={{ marginBottom: "12px" }}>
+                <label className="ss-label">Tipo de clase</label>
+                <select className="ss-input" style={{ cursor: "pointer" }} value={editForm.tipo_clase_id} onChange={e => setEditForm({ ...editForm, tipo_clase_id: e.target.value })}>
+                  {tipos.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}
+                </select>
+              </div>
+
+              <div style={{ marginBottom: "12px" }}>
+                <label className="ss-label">Coach</label>
+                <select className="ss-input" style={{ cursor: "pointer" }} value={editForm.coach_id} onChange={e => setEditForm({ ...editForm, coach_id: e.target.value })}>
+                  {coaches.filter(c => c.activa).map(c => <option key={c.id} value={c.id}>{c.nombre} {c.apellido}</option>)}
+                </select>
+              </div>
+
+              <div style={{ marginBottom: "12px" }}>
+                <label className="ss-label">Fecha</label>
+                <input className="ss-input" type="date" value={editForm.fecha} onChange={e => setEditForm({ ...editForm, fecha: e.target.value })} />
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "12px" }}>
+                <div>
+                  <label className="ss-label">Hora inicio</label>
+                  <input className="ss-input" type="time" value={editForm.hora_inicio} onChange={e => setEditForm({ ...editForm, hora_inicio: e.target.value })} />
+                </div>
+                <div>
+                  <label className="ss-label">Hora fin</label>
+                  <input className="ss-input" type="time" value={editForm.hora_fin} onChange={e => setEditForm({ ...editForm, hora_fin: e.target.value })} />
+                </div>
+              </div>
+
+              <div style={{ marginBottom: "12px" }}>
+                <label className="ss-label">Cupo máximo</label>
+                <input className="ss-input" type="number" min="1" max="50" value={editForm.cupo_maximo} onChange={e => setEditForm({ ...editForm, cupo_maximo: e.target.value })} />
+              </div>
+
+              <div style={{ marginBottom: "12px" }}>
+                <label className="ss-label">Etiqueta</label>
+                <input className="ss-input" type="text" placeholder="ej: Promoción Abril..." value={editForm.etiqueta} onChange={e => setEditForm({ ...editForm, etiqueta: e.target.value })} />
+              </div>
+
+              <div style={{ marginBottom: "16px" }}>
+                <label className="ss-label">Estado</label>
+                <select className="ss-input" style={{ cursor: "pointer" }} value={editForm.estado} onChange={e => setEditForm({ ...editForm, estado: e.target.value })}>
+                  <option value="programada">Programada</option>
+                  <option value="cancelada">Cancelada</option>
+                </select>
+              </div>
+
+              <div style={{ display: "flex", gap: "8px" }}>
+                <button onClick={() => setEditando(false)} style={{ flex: 1, padding: "10px", border: "0.5px solid #E8E0D8", background: "transparent", color: "#9A8880", fontSize: "10px", letterSpacing: "0.1em", textTransform: "uppercase", cursor: "pointer", borderRadius: "4px", fontFamily: "'Jost',sans-serif" }}>
+                  Cancelar
+                </button>
+                <button onClick={guardarEdicion} disabled={savingEdit}
+                  style={{ flex: 2, padding: "10px", background: savingEdit ? "#9A8880" : "#2C2420", color: "#FAF8F5", border: "none", fontSize: "10px", letterSpacing: "0.12em", textTransform: "uppercase", cursor: "pointer", borderRadius: "4px", fontFamily: "'Jost',sans-serif" }}>
+                  {savingEdit ? "Guardando..." : "Guardar cambios"}
+                </button>
               </div>
             </>
           )}
@@ -372,7 +459,7 @@ export default function ClasesPage() {
 
             <div style={{ marginBottom: "20px" }}>
               <label className="ss-label">Etiqueta / Promoción (opcional)</label>
-              <input className="ss-input" type="text" placeholder="ej: Promoción Abril, Semana de lanzamiento..." value={form.etiqueta} onChange={e => setForm({ ...form, etiqueta: e.target.value })} />
+              <input className="ss-input" type="text" placeholder="ej: Promoción Abril..." value={form.etiqueta} onChange={e => setForm({ ...form, etiqueta: e.target.value })} />
               <p style={{ fontSize: "10px", color: "#9A8880", marginTop: "4px" }}>Sirve para medir inscripciones por campaña</p>
             </div>
 
