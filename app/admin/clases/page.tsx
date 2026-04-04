@@ -53,10 +53,41 @@ export default function ClasesPage() {
     return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
   };
 
-  const guardarClase = async () => {
+const guardarClase = async () => {
+    const fechaFinal = form.fecha || modal.fecha || "";
+    if (!form.tipo_clase_id || !form.coach_id || !fechaFinal || !form.hora_inicio) {
+      alert("Por favor completa: tipo de clase, coach, fecha y hora de inicio.");
+      setSaving(false);
+      return;
+    }
     setSaving(true);
     const hora_fin = calcularHoraFin(form.hora_inicio, form.duracion);
-    await fetch("/api/admin/clases", {
+    const payload = {
+      tipo_clase_id: form.tipo_clase_id,
+      coach_id:      form.coach_id,
+      fecha:         fechaFinal,
+      hora_inicio:   form.hora_inicio,
+      hora_fin:      hora_fin,
+      cupo_maximo:   form.cupo_maximo,
+      etiqueta:      form.etiqueta,
+      es_recurrente: form.es_recurrente,
+    };
+    const res = await fetch("/api/admin/clases", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const json = await res.json();
+    if (!res.ok) {
+      alert("Error: " + json.error);
+      setSaving(false);
+      return;
+    }
+    setModal({ open: false });
+    setForm({ tipo_clase_id: "", coach_id: "", fecha: "", hora_inicio: "", duracion: "60", cupo_maximo: "10", etiqueta: "", es_recurrente: false });
+    cargar();
+    setSaving(false);
+  };
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ...form, hora_fin, cupo_disponible: parseInt(form.cupo_maximo) }),
